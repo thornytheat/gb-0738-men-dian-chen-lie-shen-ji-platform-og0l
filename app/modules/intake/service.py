@@ -1,6 +1,6 @@
 import re
 
-from app.config import DATASETS, MAX_PHOTO_BYTES, MAX_PHOTOS, MAX_TABLE_BYTES, TABLES
+from app.config import DATASETS, MAX_PHOTO_BYTES, MAX_PHOTOS, MAX_TABLE_BYTES, OPTIONAL_TABLES, TABLES
 from app.errors import AuditError
 from app.modules.intake.catalog import load_campaign
 from app.modules.intake.csv_reader import read_csv
@@ -26,6 +26,11 @@ def acquire(root, dataset):
     folder = root / dataset
     names = ['campaign.json', *(f'{name}.csv' for name in TABLES)]
     bundle = {name: read_limited(folder / name, MAX_TABLE_BYTES) for name in names}
+    # 替代备案是可选档件：没有备案的原件保持零抵扣，不会被默认放过。
+    for name in OPTIONAL_TABLES:
+        path = folder / f'{name}.csv'
+        if path.exists():
+            bundle[f'{name}.csv'] = read_limited(path, MAX_TABLE_BYTES)
     images = sorted(path for path in (folder / 'photos').glob('*.png') if PHOTO_FILE.fullmatch(path.name))
     if len(images) > MAX_PHOTOS:
         raise AuditError('SOURCE_TOO_LARGE', '照片张数超过档件上限', 413)
@@ -36,6 +41,9 @@ def acquire(root, dataset):
 def receive(bundle):
     campaign = load_campaign(bundle['campaign.json'])
     tables = {name: read_csv(bundle[f'{name}.csv'], name) for name in TABLES}
+    for name in OPTIONAL_TABLES:
+        if f'{name}.csv' in bundle:
+            tables[name] = read_csv(bundle[f'{name}.csv'], name)
     groups = {row['code'] for row in campaign['groups']}
     stores, stores_issues = stores_from(tables['stores'], groups)
     index = {row['store']: row for row in stores}

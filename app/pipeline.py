@@ -1,6 +1,7 @@
 from functools import cached_property
 
 from app.modules.coverage.service import coverage
+from app.modules.filings.service import load_filings
 from app.modules.intake.service import acquire, receive
 from app.modules.penalties.service import judge
 from app.modules.photos.service import collect_evidence
@@ -34,9 +35,13 @@ class Audit:
         return coverage(self.intake, self.plans, self.photos, self.sample_size)
 
     @cached_property
+    def filings(self):
+        return load_filings(self.intake, self.plans)
+
+    @cached_property
     def penalties(self):
-        return judge(self.coverage, self.intake['campaign'])
+        return judge(self.coverage, self.intake['campaign'], self.filings)
 
     @cached_property
     def settlement(self):
-        return reconcile(self.intake, self.plans, self.photos, self.coverage, self.penalties)
+        return reconcile(self.intake, self.plans, self.photos, self.coverage, self.penalties, self.filings)
