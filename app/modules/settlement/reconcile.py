@@ -15,11 +15,13 @@ def row_ledger(table, valid, issues):
             'blank': table['blank'], 'repeated_headers': table['repeated_headers']}
 
 
-def reconcile(intake, plans, photos, coverage, judgments):
+def reconcile(intake, plans, photos, coverage, judgments, clearances):
     files = {**{name: intake[name] for name in ('stores', 'slots', 'visits')},
              'plans': plans['plans'], 'aliases': plans['alias_rows'],
-             'photos': photos['photos'], 'observations': photos['observations']}
-    quarantine = sorted(intake['quarantine'] + plans['quarantine'] + photos['quarantine'],
+             'photos': photos['photos'], 'observations': photos['observations'],
+             'substitutes': clearances['filing_rows']}
+    quarantine = sorted(intake['quarantine'] + plans['quarantine'] + photos['quarantine']
+                        + clearances['quarantine'],
                         key=lambda row: (row['source']['file'], row['source']['line']))
     by_file = defaultdict(list)
     for mark in quarantine:
@@ -42,13 +44,34 @@ def reconcile(intake, plans, photos, coverage, judgments):
                 or result['ISOLATED'] != group['isolated']):
             raise AuditError('COVERAGE_LEDGER_MISMATCH', '店组抽检对账失败', 500, group['code'])
         strata.append({'code': group['code'], 'counts': {key: result[key] for key in counts},
-                       'original_cents': sum(row['original_cents'] for row in group_rows)})
-    if any(row['original_cents'] != (row['applied']['cents'] if row['applied'] else 0)
-           or bool(row['applied']) != (row['status'] == 'VIOLATION') for row in rows):
-        raise AuditError('AMOUNT_LEDGER_MISMATCH', '柜位罚额与依据不符', 500)
+                       'original_cents': sum(row['original_cents'] for row in group_rows),
+                       'offset_cents': sum(row['offset_cents'] for row in group_rows),
+                       'net_cents': sum(row['net_cents'] for row in group_rows)})
+    for row in rows:
+        if row['original_cents'] != (row['applied']['cents'] if row['applied'] else 0) \
+                or bool(row['applied']) != (row['status'] == 'VIOLATION'):
+            raise AuditError('AMOUNT_LEDGER_MISMATCH', '柜位罚额与依据不符', 500)
+        if row['offset_cents'] < 0 or row['net_cents'] != row['original_cents'] - row['offset_cents']:
+            raise AuditError('AMOUNT_LEDGER_MISMATCH', '备案抵扣与净罚额对账失败', 500, row['key'])
+        clearance = row['clearance']
+        if row['offset_cents'] and not (clearance['eligible'] and clearance['filing']):
+            raise AuditError('FILING_LEDGER_MISMATCH', '抵扣缺少有效备案依据', 500, row['key'])
+        if clearance['eligible'] and not row['offset_cents']:
+            raise AuditError('FILING_LEDGER_MISMATCH', '有效备案未形成抵扣', 500, row['key'])
+    # 同一备案（编号＋版本）在一次运行内最多抵扣一个柜位
+    consumed = Counter((row['clearance']['filing']['filing'], row['clearance']['filing']['version'])
+                       for row in rows if row['offset_cents'])
+    if any(times > 1 for times in consumed.values()):
+        raise AuditError('FILING_LEDGER_MISMATCH', '同一备案被重复抵扣', 500)
     total = sum(row['original_cents'] for row in rows)
-    if total != sum(item['original_cents'] for item in strata):
+    offset_total = sum(row['offset_cents'] for row in rows)
+    net_total = sum(row['net_cents'] for row in rows)
+    if (total != sum(item['original_cents'] for item in strata)
+            or offset_total != sum(item['offset_cents'] for item in strata)
+            or net_total != sum(item['net_cents'] for item in strata)
+            or net_total != total - offset_total):
         raise AuditError('AMOUNT_LEDGER_MISMATCH', '罚额分组对账失败', 500)
     return {'balanced': True, 'target': coverage['target'], 'selected': len(rows), 'unfilled': coverage['unfilled'],
-            'counts': counts, 'original_cents': total, 'strata': strata, 'sources': sources,
-            'quarantine': quarantine, 'reason_counts': dict(sorted(Counter(row['reason'] for row in quarantine).items()))}
+            'counts': counts, 'original_cents': total, 'offset_cents': offset_total, 'net_cents': net_total,
+            'strata': strata, 'sources': sources, 'quarantine': quarantine,
+            'reason_counts': dict(sorted(Counter(row['reason'] for row in quarantine).items()))}

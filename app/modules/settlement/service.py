@@ -14,5 +14,6 @@ def run_audit(settings, store, options):
     settlement = audit.settlement
     run['processing_ms'] = round((perf_counter() - start) * 1000, 3)
     snapshot = {'manifest': run, 'campaign': audit.intake['campaign'], 'intake': audit.intake, 'plans': audit.plans,
-                'photos': audit.photos, 'coverage': audit.coverage, 'penalties': audit.penalties, 'settlement': settlement}
+                'photos': audit.photos, 'coverage': audit.coverage, 'clearances': audit.clearances,
+                'penalties': audit.penalties, 'settlement': settlement}
     return store.save(snapshot)

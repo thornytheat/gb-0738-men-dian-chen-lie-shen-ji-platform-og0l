@@ -1,7 +1,7 @@
 # 深度登记 · 门店陈列审计台
 
 - 规模：中型。连锁酒水巡店员从本期柜位名册抽样，用生效陈列图核验独立图证，输出可复核罚额。
-- 核心规则：按有效时点和店组权重分层核验，证据不足与已证实的缺品分开，罚则同柜互斥。
+- 核心规则：按有效时点和店组权重分层核验，证据不足与已证实的缺品分开，罚则同柜互斥；替代品备案逐柜核销，跨店跨柜、过期、叠期、未上架和重复抵扣全部拦截。
 
 ## 功能模块
 
@@ -11,9 +11,10 @@
 | M2 货架版本 | 查看柜位生效图、交叠与旧商品名 | `GET /api/plans` | `app/modules/plans/windows.py` `app/modules/plans/aliases.py` | `tests/test_plans.py` |
 | M3 照片证据 | 复核图证原件、同图复用和清点完备性 | `GET /api/photos` | `app/modules/photos/fingerprints.py` `app/modules/photos/bindings.py` `app/modules/photos/observations.py` | `tests/test_photos.py` |
 | M4 抽样覆盖 | 计算各店组柜位分配与待补缺口 | `GET /api/coverage` | `app/modules/coverage/sampling.py` `app/modules/coverage/service.py` | `tests/test_coverage.py` |
-| M5 罚则裁决 | 确定缺品、乱陈、排面和价签的处罚 | `GET /api/penalties` | `app/modules/penalties/rules.py` `app/modules/penalties/service.py` | `tests/test_penalties.py` |
-| M6 结算勾稽 | 按原件、柜位和金额对账并留存批次 | `GET /api/settlement` `POST /api/settlement/runs` | `app/modules/settlement/reconcile.py` `app/modules/settlement/service.py` `app/store.py` | `tests/test_settlement.py` |
-| M7 异议复核 | 留存复核时序、重算净额并导出 | `GET /api/appeals/{run_id}` `POST /api/appeals/{run_id}/events` | `app/modules/appeals/transitions.py` `app/modules/appeals/service.py` | `tests/test_appeals.py` |
+| M5 替代备案 | 逐柜裁决备案抵扣、版本依据与现场上架 | `GET /api/substitutes` | `app/modules/substitutes/records.py` `app/modules/substitutes/service.py` | `tests/test_substitutes.py` |
+| M6 罚则裁决 | 确定缺品、乱陈、排面和价签的处罚，并核销有效备案 | `GET /api/penalties` | `app/modules/penalties/rules.py` `app/modules/penalties/service.py` | `tests/test_penalties.py` `tests/test_substitutes.py` |
+| M7 结算勾稽 | 按原件、柜位、备案和金额对账并留存批次 | `GET /api/settlement` `POST /api/settlement/runs` | `app/modules/settlement/reconcile.py` `app/modules/settlement/service.py` `app/store.py` | `tests/test_settlement.py` |
+| M8 异议复核 | 留存复核时序、重算净额并导出 | `GET /api/appeals/{run_id}` `POST /api/appeals/{run_id}/events` | `app/modules/appeals/transitions.py` `app/modules/appeals/service.py` | `tests/test_appeals.py` |
 
 ## 陷阱登记
 
@@ -41,10 +42,17 @@
 | TRAP-26 | `sample_data/field/` 的 `002:A03` 异议测试以旧版本重提 | 覆盖已受理 | 版本锁加唯一请求键 | `app/modules/appeals/transitions.py` `app/store.py` | `tests/test_appeals.py::test_stale_appeal_version_cannot_override_current_stage` |
 | TRAP-27 | `sample_data/field/photos/P002.png` 与 `P010.png` 字节相同且绑不同柜位 | 文件名不同便放行 | 实际 SHA-256 验两侧绑定 | `app/modules/photos/fingerprints.py` `app/modules/photos/bindings.py` | `tests/test_photos.py::test_different_file_names_with_equal_bytes_flag_both_bindings` |
 | TRAP-28 | `sample_data/field/` 的 `001:A04` 缺图、`002:A03` 已完成清点但缺品 | 都当缺品开罚，或都搁置 | 前者待证且 0 元，后者罚 150 元 | `app/modules/coverage/service.py` `app/modules/penalties/rules.py` | `tests/test_penalties.py::test_missing_photo_and_missing_sku_have_distinct_amounts` |
+| TRAP-31 | `substitutes.csv` 同编号同版本写到两个柜位 | 按编号去重，第二条被当重复行隔离 | 主键含门店＋柜位，两柜各自成立，运行内再限一次抵扣 | `app/modules/substitutes/records.py` `app/modules/substitutes/service.py` | `tests/test_substitutes.py::test_same_filing_used_by_two_slots_only_offsets_once` |
+| TRAP-32 | 备案有效但现场空柜 | 只认备案就放过缺品 | 核验替代品是否在有效清点中，未上架保留罚款 | `app/modules/substitutes/service.py` | `tests/test_substitutes.py::test_filing_without_substitute_on_shelf_keeps_full_penalty` |
+| TRAP-33 | 备案属于其他门店或其他柜位 | 同店/同编号即放行 | 作用域不一致分别记跨店、跨柜位，禁止抵扣 | `app/modules/substitutes/service.py` | `tests/test_substitutes.py::test_cross_store_filing_cannot_offset` `tests/test_substitutes.py::test_cross_slot_filing_cannot_offset` |
+| TRAP-34 | 备案在巡检时点过期，或多版同时有效 | 挑最新一版直接抵 | 过期记未生效，叠期阻断并保留全部候选源行 | `app/modules/substitutes/service.py` | `tests/test_substitutes.py::test_expired_filing_cannot_offset` `tests/test_substitutes.py::test_overlapping_filing_versions_block_offset` |
+| TRAP-35 | 排面不足柜位也持有有效备案 | 用备案抵消排面罚额 | 仅缺品、乱陈可抵，排面/价签罚则保留并留痕 | `app/modules/penalties/service.py` | `tests/test_substitutes.py::test_under_facings_and_price_mismatch_are_not_offsettable` |
 
 ## 对账
 
 - 抽样目标 18＝17 实际抽中＋1 名册缺额。抽中 17＝8 合规＋3 违规＋3 待证＋3 隔离。
-- 原罚额 29 500 分＝15 000 缺品＋5 500 排面不足＋9 000 错品。
-- 七档原件均按源行号对账。清点表 50＝40 采信＋10 隔离；两条同柜矛盾行有各自来源。
-- 异议记录逐柜追加，最终净额从原罚额减去确认的减免。对账支持同计数但错行、元分混用和重复事件等反例。
+- 原罚额 29 500 分＝15 000 缺品＋5 500 排面不足＋9 000 错品。field 档件 9 条备案全部因跨店、跨柜、过期、叠版或未上架被否，备案抵扣 0，净罚额仍为 29 500 分。
+- 七档原件均按源行号对账。清点表 50＝40 采信＋10 隔离；两条同柜矛盾行有各自来源。备案表同样进入源行号多重集勾稽。
+- 每笔抵扣必须回指有效备案，同编号同版本重复抵扣、有抵扣无依据、有效备案未抵扣都会抛 `FILING_LEDGER_MISMATCH`。净罚额＝原罚额－备案抵扣－异议减免，逐柜与店组两级求和必须一致。
+- 异议记录逐柜追加，最终净额从净罚额减去确认的减免；净罚为 0 的柜位不再开放异议。对账支持同计数但错行、元分混用和重复事件等反例。
+- 生成失败整批回滚、零快照，旧批次可继续读取；同档件同参数重跑复用同一 `run_id`，已生成批次永久保留当时的备案版本与现场核验结论。

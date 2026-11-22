@@ -6,6 +6,7 @@ from app.modules.penalties.service import judge
 from app.modules.photos.service import collect_evidence
 from app.modules.plans.service import plan_shelf
 from app.modules.settlement.reconcile import reconcile
+from app.modules.substitutes.service import substitute_clearance
 
 
 class Audit:
@@ -34,9 +35,13 @@ class Audit:
         return coverage(self.intake, self.plans, self.photos, self.sample_size)
 
     @cached_property
+    def clearances(self):
+        return substitute_clearance(self.intake, self.plans, self.coverage)
+
+    @cached_property
     def penalties(self):
-        return judge(self.coverage, self.intake['campaign'])
+        return judge(self.coverage, self.intake['campaign'], self.clearances)
 
     @cached_property
     def settlement(self):
-        return reconcile(self.intake, self.plans, self.photos, self.coverage, self.penalties)
+        return reconcile(self.intake, self.plans, self.photos, self.coverage, self.penalties, self.clearances)

@@ -9,7 +9,7 @@ def next_event(snapshot, payload):
     base = next((row for row in snapshot['penalties']['rows'] if row['key'] == key), None)
     if not base:
         raise AuditError('SHELF_NOT_FOUND', '该柜位未在本次抽中', 404)
-    if base['status'] != 'VIOLATION':
+    if base['status'] != 'VIOLATION' or base['net_cents'] <= 0:
         raise AuditError('NO_PENALTY', '该柜位没有可复核罚额', 409, base['status'])
     history = [item for item in snapshot['events'] if item['key'] == key]
     last = history[-1] if history else None
@@ -20,7 +20,7 @@ def next_event(snapshot, payload):
     previous_status = last['status'] if last else None
     if not ((previous_status is None and action == 'OPEN') or (previous_status == 'OPEN' and action in FINAL)):
         raise AuditError('INVALID_TRANSITION', '当前异议状态不允许该动作', 409, previous_status)
-    old = base['original_cents']
+    old = base['net_cents']
     requested = payload.get('reduction_cents')
     if action == 'REDUCED':
         if requested is None or not 0 < requested < old:

@@ -87,21 +87,41 @@ function coverage(root, payload) {
 
 function penalties(root, payload, filter) {
   const rows = payload.rows.filter(row => !filter || (filter.key ? filter.key === row.key : filter.group === row.group && filter.outcome === row.status));
-  root.append(table([['柜位'], ['状态'], ['原因码'], ['命中罚则与金额'], ['执行额 · 元', 'num'], ['生效版'], ['照片'], ['清点源行']],
+  root.append(table([['柜位'], ['状态'], ['原因码'], ['命中罚则与金额'], ['原罚 · 元', 'num'], ['备案抵扣 · 元', 'num'],
+    ['净罚 · 元', 'num'], ['备案裁决'], ['生效版'], ['清点源行']],
     rows.map(row => [row.key, flag(row.status), row.reason,
-      row.candidates.map(entry => `${reason(entry.code)} ${money(entry.cents)}`).join(' / ') || '—', money(row.original_cents), row.plan?.plan,
-      row.evidence?.photos.map(pic => `${pic.photo} / ${source(pic.source)}`).join(' · '), row.evidence?.completed_sources.join(' / ')])));
+      row.candidates.map(entry => `${reason(entry.code)} ${money(entry.cents)}`).join(' / ') || '—', money(row.original_cents),
+      money(row.offset_cents), money(row.net_cents), names[row.clearance?.status] || reason(row.clearance?.status),
+      row.plan?.plan, row.evidence?.completed_sources.join(' / ')])));
   if (rows.length === 1) {
     const [row] = rows;
     const products = row.evidence?.products || {};
     group(root, `${row.key} 清点商品`, table([['应陈商品'], ['实陈商品'], ['排面', 'num'], ['价签 · 元', 'num'], ['来源']],
       Object.entries(products).map(([key, item]) => [row.plan?.sku, key, item.facings, money(item.price_cents), item.sources.join(' / ')])));
+    const verdict = row.clearance;
+    if (verdict && verdict.status !== 'NO_FILING') {
+      group(root, `${row.key} 备案核销`, table([['备案编号'], ['版本'], ['替代品'], ['现场是否上架'], ['裁决依据源行'], ['裁决']],
+        [[verdict.filing?.filing, verdict.filing?.version, verdict.substitute_sku,
+          verdict.on_shelf ? '已上架' : '未上架', verdict.sources.join(' / '), names[verdict.status] || reason(verdict.status)]]));
+    }
   }
 }
 
+function substitutes(root, payload) {
+  root.append(table([['柜位'], ['备案裁决'], ['可否抵扣'], ['备案编号'], ['版本'], ['替代品'], ['现场上架'], ['依据源行']],
+    payload.rows.map(row => [row.key, names[row.status] || reason(row.status), row.eligible ? '可抵' : '不可抵',
+      row.filing?.filing, row.filing?.version, row.substitute_sku, row.on_shelf ? '已上架' : '未上架', row.sources.join(' / ')])));
+  group(root, '总部备案原件', table([['备案编号'], ['版本'], ['门店'], ['柜位'], ['应陈商品'], ['替代品'], ['生效起 UTC'], ['生效止 UTC'], ['源行']],
+    payload.filing_rows.map(row => [row.filing, row.version, row.store, row.slot, row.expected_sku, row.substitute_sku,
+      row.start_utc, row.end_utc, source(row.source)])));
+  quarantine(root, payload.quarantine);
+}
+
 function settlement(root, payload) {
-  root.append(table([['店组'], ...outcomes.map(key => [names[key], 'num']), ['原罚额 · 元', 'num']], payload.strata.map(row => [
+  root.append(table([['店组'], ...outcomes.map(key => [names[key], 'num']), ['原罚额 · 元', 'num'],
+    ['备案抵扣 · 元', 'num'], ['净罚额 · 元', 'num']], payload.strata.map(row => [
     row.code, ...outcomes.map(key => row.counts[key]), money(row.original_cents),
+    money(row.offset_cents), money(row.net_cents),
   ])));
   group(root, '原件行数勾稽', table([['档件'], ['输入', 'num'], ['采信', 'num'], ['隔离', 'num'], ['空行', 'num'], ['表头', 'num']],
     Object.entries(payload.sources).map(([file, row]) => [file, row.input, row.accepted, row.isolated, row.blank, row.repeated_headers])));
@@ -123,5 +143,6 @@ export function details(root, key, payload, options) {
   }
   if (key === 'photos') photos(root, payload, options.dataset);
   else if (key === 'penalties') penalties(root, payload, options.filter);
+  else if (key === 'substitutes') substitutes(root, payload);
   else ({intake, plans, coverage, settlement, appeals})[key](root, payload);
 }

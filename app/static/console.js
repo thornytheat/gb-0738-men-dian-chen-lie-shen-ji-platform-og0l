@@ -71,7 +71,7 @@ function refreshDetails() {
   }
   get('detail-title').textContent = link.textContent.trim();
   get('clear-filter').hidden = !state.filter;
-  const payload = state.snapshot?.[state.panel] || state.preview;
+  const payload = state.snapshot?.[state.panel === 'substitutes' ? 'clearances' : state.panel] || state.preview;
   details(get('detail-body'), state.panel, payload, {dataset: state.snapshot?.manifest.parameters.dataset || options().dataset,
     filter: state.filter});
   fillAppeals();

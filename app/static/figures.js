@@ -1,7 +1,11 @@
 export const outcomes = ['COMPLIANT', 'VIOLATION', 'PENDING', 'ISOLATED'];
 export const names = {COMPLIANT: '合规', VIOLATION: '违规', PENDING: '待证', ISOLATED: '隔离', BALANCED: '已勾稽',
   OPEN: '已受理', UPHELD: '维持原罚', WAIVED: '全额免除', REDUCED: '部分减免', NONE: '未发起',
-  RECEIVED: '已收件', EMPTY_FILE: '空档', BLANK_FILE: '空行档', HEADER_ONLY: '仅表头'};
+  RECEIVED: '已收件', EMPTY_FILE: '空档', BLANK_FILE: '空行档', HEADER_ONLY: '仅表头',
+  NO_FILING: '无备案', FILING_OK: '准予抵扣', FILING_NOT_PRESENT: '替代品未上架',
+  FILING_SCOPE_STORE: '跨店无效', FILING_SCOPE_SLOT: '跨柜位无效', FILING_NOT_ACTIVE: '备案过期',
+  FILING_OVERLAP: '版本叠期', FILING_VERSION_CONFLICT: '版本矛盾', FILING_DUPLICATE_USE: '禁止重复抵扣',
+  FILING_RULE_NOT_OFFSETTABLE: '罚则不可抵'};
 const dictionary = JSON.parse(document.getElementById('reason-map').textContent);
 export const reason = code => code ? dictionary[code] || code : '—';
 export const money = cents => (cents / 100).toFixed(2);
@@ -88,9 +92,10 @@ export function cases(root, rows) {
 }
 
 export function accounts(root, appeal) {
-  const content = [['原罚额', appeal.original_cents], ['异议减免', appeal.reduction_cents], ['结算净罚额', appeal.net_cents]];
+  const content = [['原罚额', appeal.gross_cents], ['备案抵扣', appeal.filing_offset_cents],
+    ['异议减免', appeal.reduction_cents], ['结算净罚额', appeal.net_cents]];
   root.replaceChildren(...content.map(([label, cents], index) => {
-    const line = element('div', null, index === 2 ? 'money-row is-net' : 'money-row');
+    const line = element('div', null, index === content.length - 1 ? 'money-row is-net' : 'money-row');
     line.append(element('span', label), element('strong', money(cents), 'num'));
     return line;
   }));

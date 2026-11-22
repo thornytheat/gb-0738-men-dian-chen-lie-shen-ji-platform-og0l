@@ -25,6 +25,9 @@ out/
 .vite/
 .parcel-cache/
 coverage/
+# 抽样覆盖业务模块不属于测试覆盖率产物，需要纳入版本库
+!app/modules/coverage/
+!app/modules/coverage/**
 *.pyc
 venv/
 target/

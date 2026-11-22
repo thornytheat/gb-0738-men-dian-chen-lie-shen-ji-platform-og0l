@@ -30,7 +30,7 @@ uvicorn app.main:app --port 18427
 
 Compose 使用 `audit-data` 命名卷；本地数据库默认为 `data/audits.sqlite3`。可通过 `SHELF_DB_PATH` 指定新数据库。
 
-## 七个业务入口
+## 八个业务入口
 
 | 模块 | 入口 | 动作 |
 |---|---|---|
@@ -38,10 +38,15 @@ Compose 使用 `audit-data` 命名卷；本地数据库默认为 `data/audits.sq
 | 货架版本 | `GET /api/plans` | 按有效到访时点匹配规则、登记重叠和 SKU 旧名 |
 | 照片证据 | `GET /api/photos` | 读取原件、核验拍摄窗口、发现跨柜复用和清点矛盾 |
 | 抽样覆盖 | `GET /api/coverage` | 按店组分配和确定性抽取柜位、保留未填额 |
-| 罚则裁决 | `GET /api/penalties` | 区分缺图、缺品及无法裁决，择一执行罚则 |
+| 替代备案 | `GET /api/substitutes` | 逐柜裁决备案能否抵扣、依据哪一版、替代品是否真上架 |
+| 罚则裁决 | `GET /api/penalties` | 区分缺图、缺品及无法裁决，备案核销后择一执行罚则 |
 | 结算勾稽 | `GET /api/settlement`、`POST /api/settlement/runs` | 对账预览或生成可复用的结算批次 |
 | 异议复核 | `GET /api/appeals/{run_id}`、`POST /api/appeals/{run_id}/events` | 查看并追加复核事件，核算净额 |
 
 预检接口接受 `dataset=field` 或 `dataset=reference`，以及可选 `sample_size`。运行提交同名 JSON 字段。使用 `GET /api/settlement/runs/{run_id}` 读取批次，使用 `GET /api/appeals/{run_id}/export` 下载证据。接口目录位于 `/docs`。
+
+### 替代品备案规则
+
+门店用总部备案的替代品顶缺货柜位时，工作台不会只看备案、也不会只信现场。逐柜结论同时回答三件事：备案能否抵扣、依据的是哪一编号哪一版本、替代品在现场是否真的上架。备案跨店、跨柜位或在巡检时点过期都不能算数；同一时点多版备案叠期则依据不确定、不予抵扣；现场空柜或清点不到替代品同样保留罚款。同一备案编号＋版本在一次运行内只能抵扣一个柜位，重跑相同档件复用同一批次、不会重复抵扣。生成失败时整批回滚、旧批次原样保留，已生成批次可随时追回当时的备案源行与核验结果。结算按「原罚额－备案抵扣－异议减免＝净罚额」勾稽，可直接交财务。
 
 [字段与规则](docs/DATA-DICTIONARY.md) · [测试证据](docs/DEPTH.md)

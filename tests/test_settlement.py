@@ -24,7 +24,7 @@ def test_substituted_source_same_row_count_fails(field):
     photos = deepcopy(field.photos)
     photos['observations'][1] = photos['observations'][0]
     with pytest.raises(AuditError) as error:
-        reconcile(field.intake, field.plans, photos, field.coverage, field.penalties)
+        reconcile(field.intake, field.plans, photos, field.coverage, field.penalties, field.clearances)
     assert (error.value.code, error.value.evidence) == ('SOURCE_LEDGER_MISMATCH', 'observations.csv')
 
 
@@ -32,7 +32,7 @@ def test_incorrect_penalty_amount_fails_per_slot_reconciliation(field):
     adjusted = deepcopy(field.penalties)
     next(row for row in adjusted['rows'] if row['status'] == 'VIOLATION')['original_cents'] += 1
     with pytest.raises(AuditError) as error:
-        reconcile(field.intake, field.plans, field.photos, field.coverage, adjusted)
+        reconcile(field.intake, field.plans, field.photos, field.coverage, adjusted, field.clearances)
     assert error.value.code == 'AMOUNT_LEDGER_MISMATCH'
 
 
