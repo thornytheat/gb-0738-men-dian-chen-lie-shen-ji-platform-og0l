@@ -15,12 +15,16 @@ def row_ledger(table, valid, issues):
             'blank': table['blank'], 'repeated_headers': table['repeated_headers']}
 
 
-def reconcile(intake, plans, photos, coverage, judgments):
+def reconcile(intake, plans, photos, coverage, judgments, filings=None):
     files = {**{name: intake[name] for name in ('stores', 'slots', 'visits')},
              'plans': plans['plans'], 'aliases': plans['alias_rows'],
              'photos': photos['photos'], 'observations': photos['observations']}
     quarantine = sorted(intake['quarantine'] + plans['quarantine'] + photos['quarantine'],
                         key=lambda row: (row['source']['file'], row['source']['line']))
+    if filings is not None and filings.get('present'):
+        files['filings'] = filings['rows']
+        quarantine = sorted(quarantine + filings['quarantine'],
+                            key=lambda row: (row['source']['file'], row['source']['line']))
     by_file = defaultdict(list)
     for mark in quarantine:
         by_file[mark['source']['file']].append(mark)
@@ -49,6 +53,23 @@ def reconcile(intake, plans, photos, coverage, judgments):
     total = sum(row['original_cents'] for row in rows)
     if total != sum(item['original_cents'] for item in strata):
         raise AuditError('AMOUNT_LEDGER_MISMATCH', '罚额分组对账失败', 500)
+    assessed = sum(row.get('assessed_cents', row['original_cents']) for row in rows)
+    offset = sum(row.get('offset_cents', 0) for row in rows)
+    if assessed - offset != total:
+        raise AuditError('AMOUNT_LEDGER_MISMATCH', '备案抵扣后罚额对账失败', 500)
+    offsets = [{'key': row['key'], 'filing': row['filing']['filing'], 'reason': row['filing']['reason'],
+                'plan': row['filing']['filing_plan'], 'plan_source': row['filing']['filing_plan_source'],
+                'assessed_cents': row['assessed_cents'], 'offset_cents': row['offset_cents'],
+                'filing_source': row['filing']['filing_source'],
+                'substitute_on_shelf': row['filing']['substitute_on_shelf'],
+                'observed': row['filing']['observed']} for row in rows if row.get('offset_cents')]
+    # 一条备案只属于一个柜位，任何重复抵扣都视为对账失败。
+    if len({item['filing'] for item in offsets}) != len(offsets) or any(
+            not (row['filing']['verdict'] == 'APPLIED'
+                 and 'MISSING_SKU' in {finding['code'] for finding in row['candidates']})
+            for row in rows if row.get('offset_cents')):
+        raise AuditError('AMOUNT_LEDGER_MISMATCH', '备案抵扣范围或重复使用对账失败', 500)
     return {'balanced': True, 'target': coverage['target'], 'selected': len(rows), 'unfilled': coverage['unfilled'],
-            'counts': counts, 'original_cents': total, 'strata': strata, 'sources': sources,
+            'counts': counts, 'original_cents': total, 'assessed_cents': assessed, 'offset_cents': offset,
+            'strata': strata, 'sources': sources, 'offsets': offsets,
             'quarantine': quarantine, 'reason_counts': dict(sorted(Counter(row['reason'] for row in quarantine).items()))}

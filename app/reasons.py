@@ -13,6 +13,18 @@ REASONS = {
     'BAD_OBSERVATION': '清点行格式无效', 'OBSERVATION_CONFLICT': '同商品清点结果矛盾',
     'MISSING_SKU': '应陈商品未出现', 'WRONG_SKU': '出现陈列图外的商品',
     'UNDER_FACINGS': '应陈商品排面不足', 'PRICE_MISMATCH': '标价与陈列图不符',
+    'UNKNOWN_PLAN': '备案引用的陈列图未登记',
+    'FILING_APPLIED': '备案替代已上架，抵扣原罚',
+    'SUBSTITUTE_ABSENT': '备案替代品未实际上架',
+    'FILING_STORE_MISMATCH': '备案登记在其他门店，跨店不适用',
+    'FILING_SLOT_MISMATCH': '备案登记在其他柜位，跨柜位不适用',
+    'FILING_EXPIRED': '备案不在有效期内',
+    'FILING_PLAN_MISMATCH': '备案依据的陈列图版本不符',
+    'FILING_TERMS_NOT_MET': '替代品未达备案排面或价签条件',
+    'FILING_PENDING': '柜位证据待证，备案暂不能抵扣',
+    'FILING_BLOCKED': '柜位证据已隔离，备案不能抵扣',
+    'FILING_NOT_REQUIRED': '应陈商品已在架，无需替代',
+    'NO_FILING': '柜位没有对应备案',
 }
 
 

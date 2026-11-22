@@ -24,7 +24,8 @@ out/
 .cache/
 .vite/
 .parcel-cache/
-coverage/
+# 只忽略测试覆盖率产物，不能吞掉 app/modules/coverage 业务包
+/coverage/
 *.pyc
 venv/
 target/

@@ -2,10 +2,9 @@ import re
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request
-
 from fastapi.responses import Response
 
-from app.config import MAX_PHOTO_BYTES, Options
+from app.config import DATASETS, MAX_PHOTO_BYTES, Options
 from app.errors import AuditError
 from app.modules.intake.service import PHOTO_FILE, read_limited
 from app.modules.intake.values import InvalidRow
@@ -13,6 +12,7 @@ from app.modules.photos.fingerprints import png_hash
 from app.pipeline import Audit
 
 router = APIRouter(prefix='/api/photos')
+Dataset = Literal[tuple(DATASETS)]
 
 
 @router.get('')
@@ -21,7 +21,7 @@ def inspect(request: Request, options: Annotated[Options, Query()]):
 
 
 @router.get('/original/{dataset}/{filename}/{digest}')
-def original(request: Request, dataset: Literal['field', 'reference'], filename: str, digest: str):
+def original(request: Request, dataset: Dataset, filename: str, digest: str):
     if not PHOTO_FILE.fullmatch(filename) or not re.fullmatch(r'[0-9a-f]{64}', digest):
         raise AuditError('PHOTO_NOT_FOUND', '照片原件编号无效', 404)
     folder = request.app.state.settings.sample_root / dataset / 'photos'

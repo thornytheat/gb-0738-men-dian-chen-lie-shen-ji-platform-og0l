@@ -14,14 +14,21 @@ def appeal_balances(snapshot):
         if not 0 <= reduction <= original:
             raise AuditError('AMOUNT_LEDGER_MISMATCH', '异议减免金额对账失败', 500, base['key'])
         rows.append({'key': base['key'], 'original_cents': original, 'reduction_cents': reduction, 'net_cents': original - reduction,
-                     'status': event['status'] if event else 'NONE', 'version': event['version'] if event else 0})
+                     'status': event['status'] if event else 'NONE', 'version': event['version'] if event else 0,
+                     'filing_reason': (base.get('filing') or {}).get('reason')})
     original_cents = snapshot['settlement']['original_cents']
+    assessed_cents = snapshot['settlement'].get('assessed_cents', original_cents)
+    offset_cents = snapshot['settlement'].get('offset_cents', 0)
     reduced_cents = sum(row['reduction_cents'] for row in rows)
     net_cents = sum(row['net_cents'] for row in rows)
-    if original_cents != reduced_cents + net_cents:
+    if original_cents != reduced_cents + net_cents or assessed_cents - offset_cents != original_cents:
         raise AuditError('AMOUNT_LEDGER_MISMATCH', '净额对账失败', 500)
     return {'original_cents': original_cents, 'reduction_cents': reduced_cents, 'net_cents': net_cents,
-            'balanced': True, 'rows': rows, 'events': snapshot['events']}
+            'assessed_cents': assessed_cents, 'offset_cents': offset_cents,
+            'balanced': True, 'rows': rows, 'events': snapshot['events'],
+            'finance': {'assessed_cents': assessed_cents, 'filing_offset_cents': offset_cents,
+                        'penalty_cents': original_cents, 'appeal_reduction_cents': reduced_cents,
+                        'payable_cents': net_cents}}
 
 
 def with_appeals(snapshot):

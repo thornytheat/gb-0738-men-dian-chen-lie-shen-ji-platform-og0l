@@ -86,10 +86,11 @@ function syncDashboard(snapshot) {
   get('batch-stamp').title = snapshot.manifest.run_id;
   get('stat-selected').textContent = snapshot.settlement.selected;
   for (const status of outcomes) get(`stat-${status.toLowerCase()}`).textContent = snapshot.settlement.counts[status];
+  get('stat-offset').textContent = money(snapshot.appeals.offset_cents);
   get('stat-net').textContent = money(snapshot.appeals.net_cents);
   get('matrix-meta').textContent = `${snapshot.coverage.selected} 柜`;
   get('gap-meta').textContent = `${snapshot.coverage.verified} / ${snapshot.coverage.target} 已核`;
-  get('cases-meta').textContent = `${snapshot.settlement.counts.VIOLATION} 笔违规`;
+  get('cases-meta').textContent = `${snapshot.settlement.counts.VIOLATION} 笔违规 · 抵扣 ${money(snapshot.settlement.offset_cents)} 元`;
   get('account-meta').textContent = snapshot.appeals.balanced ? '勾稽通过 · 元' : '待勾稽';
   get('run-meta').textContent = `${localTime.format(new Date(snapshot.manifest.created_at))} · UTC+08:00 · ${snapshot.manifest.rule_version}`;
   get('run-feedback').textContent = snapshot.reused ? '已复用巡检批次 · 对账通过' : '巡检完成 · 对账通过';
